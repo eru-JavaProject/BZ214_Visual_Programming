@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- MVC BOUNDARY: Model → Controller → View -->
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1">
+    <center>
+        <GridPane fx:id="roomGrid">
+            <!-- TODO -->
+        </GridPane>
+    </center>
+    <right>
+        <VBox spacing="10">
+            <Button text="Start" onAction="#handleStart"/>
+            <Button text="Pause" onAction="#handlePause"/>
+            <Button text="Reset" onAction="#handleReset"/>
+            <Button text="Return" onAction="#handleReturn"/>
+
+            <Label text="Speed"/>
+            <Slider fx:id="speedSlider"/>
+
+            <ComboBox fx:id="dirtTypeDropdown"/>
+
+            <Label fx:id="batteryLabel"/>
+            <Label fx:id="positionLabel"/>
+            <Label fx:id="statusLabel"/>
+            <Label fx:id="cleanedPercentLabel"/>
+        </VBox>
+    </right>
+</BorderPane>
+
