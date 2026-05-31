@@ -1,24 +1,27 @@
 package model;
 
 public enum DirtType {
-    DUST(1, 1.0),
-    LIQUID(2, 2.0),
-    STAIN(3, 3.5);
+    DUST(2, 1.0),
+    LIQUID(4, 2.5),
+    STAIN(6, 4.0);
 
-    private final int cleaningSteps;
-    private final double batteryCostPerStep;
+    private final int cleaningDuration;
+    private final double batteryCost;
 
-    DirtType(int cleaningSteps, double batteryCostPerStep) {
-        this.cleaningSteps = cleaningSteps;
-        this.batteryCostPerStep = batteryCostPerStep;
+    DirtType(int cleaningDuration, double batteryCost) {
+        this.cleaningDuration = cleaningDuration;
+        this.batteryCost = batteryCost;
     }
 
-    public int getCleaningSteps() {
-        return cleaningSteps;
+    public int getCleaningDuration() {
+        return cleaningDuration;
+    }
+
+    public double getBatteryCost() {
+        return batteryCost;
     }
 
     public double getBatteryCostPerStep() {
-        return batteryCostPerStep;
+        return batteryCost / cleaningDuration;
     }
 }
-
