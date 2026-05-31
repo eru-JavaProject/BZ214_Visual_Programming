@@ -4,11 +4,13 @@
 <?import javafx.scene.layout.*?>
 
 <!-- MVC BOUNDARY: Model → Controller → View -->
-<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1">
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="view.RoomViewController">
     <center>
-        <GridPane fx:id="roomGrid">
-            <!-- TODO -->
-        </GridPane>
+        <ScrollPane fitToWidth="true" fitToHeight="true">
+            <content>
+                <GridPane fx:id="roomGrid" />
+            </content>
+        </ScrollPane>
     </center>
     <right>
         <VBox spacing="10">
@@ -29,4 +31,3 @@
         </VBox>
     </right>
 </BorderPane>
-

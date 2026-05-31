@@ -38,13 +38,25 @@ public class Robot {
     public void move(Room room) {
         int nextX = x + direction.getDx();
         int nextY = y + direction.getDy();
-        if (room != null && room.isWalkable(nextX, nextY)) {
+        boolean canMove = room != null && room.isValid(nextX, nextY) && room.isWalkable(nextX, nextY);
+        if (canMove) {
             x = nextX;
             y = nextY;
             drainBattery(1.0);
         } else {
             direction = direction.turnRight();
             drainBattery(0.5);
+        }
+    }
+
+    /**
+     * Starts cleaning if the given cell has dirt.
+     *
+     * @param cell the cell to clean
+     */
+    public void clean(Cell cell) {
+        if (cell != null && cell.getDirt() != null) {
+            startCleaning();
         }
     }
 
