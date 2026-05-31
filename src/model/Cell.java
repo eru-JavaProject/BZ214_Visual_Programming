@@ -3,7 +3,7 @@ package model;
 public class Cell {
     private final int x;
     private final int y;
-    private CellType cell;
+    private CellType type;
     private DirtType dirt;
     private boolean isCleaned;
 
@@ -46,7 +46,7 @@ public class Cell {
     public void cleanDirt() {
         this.dirt = null;
         this.isCleaned = true;
-    }
-}
-}
 
+    }
+
+}
