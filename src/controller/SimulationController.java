@@ -3,7 +3,9 @@ package controller;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.util.Duration;
@@ -21,8 +23,11 @@ public class SimulationController {
     private final StringProperty positionInfoProperty = new SimpleStringProperty();
     private final DoubleProperty cleanedPercentProperty = new SimpleDoubleProperty();
     private final StringProperty statusProperty = new SimpleStringProperty("IDLE");
+    private final IntegerProperty robotXProperty = new SimpleIntegerProperty();
+    private final IntegerProperty robotYProperty = new SimpleIntegerProperty();
 
     private Timeline simulationTimeline;
+    private boolean isPaused;
 
     public SimulationController() {
         initialize();
@@ -38,6 +43,9 @@ public class SimulationController {
         positionInfoProperty.set(robot.getX() + "," + robot.getY());
         cleanedPercentProperty.set(0.0);
         statusProperty.set("IDLE");
+        robotXProperty.set(robot.getX());
+        robotYProperty.set(robot.getY());
+        isPaused = false;
     }
 
     /**
@@ -45,10 +53,18 @@ public class SimulationController {
      */
     public void startSimulation() {
         if (simulationTimeline != null) {
+            isPaused = false;
             simulationTimeline.play();
             return;
         }
-        simulationTimeline = new Timeline(new KeyFrame(Duration.seconds(0.5), event -> updateSimulation()));
+        simulationTimeline = new Timeline(new KeyFrame(Duration.seconds(0.5), event -> {
+            if (isPaused) {
+                return;
+            }
+            robot.move(room);
+            robotXProperty.set(robot.getX());
+            robotYProperty.set(robot.getY());
+        }));
         simulationTimeline.setCycleCount(Timeline.INDEFINITE);
         simulationTimeline.play();
     }
@@ -57,6 +73,7 @@ public class SimulationController {
      * Stops the simulation loop.
      */
     public void pauseSimulation() {
+        isPaused = true;
         if (simulationTimeline != null) {
             simulationTimeline.pause();
         }
@@ -114,6 +131,14 @@ public class SimulationController {
 
     public StringProperty statusProperty() {
         return statusProperty;
+    }
+
+    public IntegerProperty robotXPropertyProperty() {
+        return robotXProperty;
+    }
+
+    public IntegerProperty robotYPropertyProperty() {
+        return robotYProperty;
     }
 
     public Room getRoom() {
