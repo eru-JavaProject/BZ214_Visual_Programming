@@ -8,15 +8,19 @@ import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import javafx.util.Duration;
+import model.Cell;
+import model.CellType;
 import model.Direction;
+import model.DirtType;
 import model.Robot;
 import model.Room;
+import view.RoomViewController;
 
 public class SimulationController {
 
     private Room room;
     private Robot robot;
+    private RoomViewController view;
 
     // Properties expose model state to the view without coupling the model to JavaFX.
     private final DoubleProperty batteryLevelProperty = new SimpleDoubleProperty();
@@ -46,6 +50,10 @@ public class SimulationController {
         robotXProperty.set(robot.getX());
         robotYProperty.set(robot.getY());
         isPaused = false;
+        if (view != null) {
+            view.initializeGrid(20, 20);
+            syncViewWithModel();
+        }
     }
 
     /**
@@ -57,13 +65,14 @@ public class SimulationController {
             simulationTimeline.play();
             return;
         }
-        simulationTimeline = new Timeline(new KeyFrame(Duration.seconds(0.5), event -> {
+        simulationTimeline = new Timeline(new KeyFrame(javafx.util.Duration.seconds(0.5), event -> {
             if (isPaused) {
                 return;
             }
             robot.move(room);
             robotXProperty.set(robot.getX());
             robotYProperty.set(robot.getY());
+            syncViewWithModel();
         }));
         simulationTimeline.setCycleCount(Timeline.INDEFINITE);
         simulationTimeline.play();
@@ -98,6 +107,56 @@ public class SimulationController {
      */
     public void updateSimulation() {
         System.out.println("Simulation Tick");
+    }
+
+    public void syncViewWithModel() {
+        if (view == null || room == null) {
+            return;
+        }
+        int height = 20;
+        int width = 20;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Cell cell = room.getCell(x, y);
+                RoomViewController.CellState state = mapState(cell);
+                boolean hasDirt = cell != null && cell.getDirt() != null;
+                view.updateCellVisual(x, y, state, hasDirt);
+            }
+        }
+        view.updateCellVisual(robot.getX(), robot.getY(), RoomViewController.CellState.ROBOT, false);
+    }
+
+    private RoomViewController.CellState mapState(Cell cell) {
+        if (cell == null) {
+            return RoomViewController.CellState.EMPTY;
+        }
+        CellType type = cell.getType();
+        if (type == CellType.WALL) {
+            return RoomViewController.CellState.WALL;
+        }
+        if (type == CellType.FURNITURE) {
+            return RoomViewController.CellState.FURNITURE;
+        }
+        if (type == CellType.CHARGING_STATION) {
+            return RoomViewController.CellState.CHARGING_STATION;
+        }
+        DirtType dirt = cell.getDirt();
+        if (dirt == DirtType.DUST) {
+            return RoomViewController.CellState.DUST;
+        }
+        if (dirt == DirtType.LIQUID) {
+            return RoomViewController.CellState.LIQUID;
+        }
+        if (dirt == DirtType.STAIN) {
+            return RoomViewController.CellState.STAIN;
+        }
+        return RoomViewController.CellState.EMPTY;
+    }
+
+    public void setView(RoomViewController view) {
+        this.view = view;
+        view.initializeGrid(20, 20);
+        syncViewWithModel();
     }
 
     public DoubleProperty getBatteryProperty() {
