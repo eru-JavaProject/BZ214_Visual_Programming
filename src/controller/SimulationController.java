@@ -20,6 +20,7 @@ public class SimulationController {
     private final DoubleProperty batteryLevelProperty = new SimpleDoubleProperty();
     private final StringProperty positionInfoProperty = new SimpleStringProperty();
     private final DoubleProperty cleanedPercentProperty = new SimpleDoubleProperty();
+    private final StringProperty statusProperty = new SimpleStringProperty("IDLE");
 
     private Timeline simulationTimeline;
 
@@ -36,6 +37,7 @@ public class SimulationController {
         batteryLevelProperty.set(robot.getBatteryPercentage());
         positionInfoProperty.set(robot.getX() + "," + robot.getY());
         cleanedPercentProperty.set(0.0);
+        statusProperty.set("IDLE");
     }
 
     /**
@@ -91,6 +93,27 @@ public class SimulationController {
 
     public DoubleProperty getCleanedPercentProperty() {
         return cleanedPercentProperty;
+    }
+
+    public StringProperty getStatusProperty() {
+        return statusProperty;
+    }
+
+    // Compatibility getters for existing view bindings.
+    public DoubleProperty batteryProperty() {
+        return batteryLevelProperty;
+    }
+
+    public StringProperty positionProperty() {
+        return positionInfoProperty;
+    }
+
+    public DoubleProperty cleanedPercentProperty() {
+        return cleanedPercentProperty;
+    }
+
+    public StringProperty statusProperty() {
+        return statusProperty;
     }
 
     public Room getRoom() {
