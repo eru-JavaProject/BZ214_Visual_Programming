@@ -32,6 +32,8 @@ public class SimulationController {
 
     private Timeline simulationTimeline;
     private boolean isPaused;
+    // Tracks elapsed simulation time in seconds.
+    private final DoubleProperty simulationTimeProperty = new SimpleDoubleProperty(0.0);
 
     public SimulationController() {
         initialize();
@@ -51,6 +53,7 @@ public class SimulationController {
         positionInfoProperty.set(robot.getX() + "," + robot.getY());
         cleanedPercentProperty.set(0.0);
         statusProperty.set("IDLE");
+        simulationTimeProperty.set(0.0);
         isPaused = false;
         if (view != null) {
             view.initializeGrid(20, 20);
@@ -64,6 +67,7 @@ public class SimulationController {
     public void startSimulation() {
         if (simulationTimeline != null) {
             isPaused = false;
+            statusProperty.set("RUNNING");
             simulationTimeline.play();
             return;
         }
@@ -72,11 +76,14 @@ public class SimulationController {
                 return;
             }
             robot.move(room);
+            // advance simulation time by the tick duration
+            simulationTimeProperty.set(simulationTimeProperty.get() + 0.5);
             // properties bound to robot will update automatically; update positionInfo and view sync.
             positionInfoProperty.set(robot.getX() + "," + robot.getY());
             syncViewWithModel();
         }));
         simulationTimeline.setCycleCount(Timeline.INDEFINITE);
+        statusProperty.set("RUNNING");
         simulationTimeline.play();
     }
 
@@ -85,6 +92,7 @@ public class SimulationController {
      */
     public void pauseSimulation() {
         isPaused = true;
+        statusProperty.set("PAUSED");
         if (simulationTimeline != null) {
             simulationTimeline.pause();
         }
@@ -95,6 +103,8 @@ public class SimulationController {
      */
     public void resetSimulation() {
         initialize();
+        statusProperty.set("IDLE");
+        simulationTimeProperty.set(0.0);
     }
 
     /**
@@ -208,5 +218,14 @@ public class SimulationController {
 
     public Robot getRobot() {
         return robot;
+    }
+
+    // New accessors for simulation time
+    public double getSimulationTime() {
+        return simulationTimeProperty.get();
+    }
+
+    public DoubleProperty simulationTimeProperty() {
+        return simulationTimeProperty;
     }
 }
