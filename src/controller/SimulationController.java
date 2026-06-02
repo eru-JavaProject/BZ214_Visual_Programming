@@ -43,12 +43,14 @@ public class SimulationController {
     public void initialize() {
         room = new Room(20, 20);
         robot = new Robot(1, 1, Direction.RIGHT, 100.0);
-        batteryLevelProperty.set(robot.getBatteryPercentage());
+
+        // Bind controller properties to robot properties where possible.
+        batteryLevelProperty.bind(robot.batteryLevelProperty());
+        robotXProperty.bind(robot.xProperty());
+        robotYProperty.bind(robot.yProperty());
         positionInfoProperty.set(robot.getX() + "," + robot.getY());
         cleanedPercentProperty.set(0.0);
         statusProperty.set("IDLE");
-        robotXProperty.set(robot.getX());
-        robotYProperty.set(robot.getY());
         isPaused = false;
         if (view != null) {
             view.initializeGrid(20, 20);
@@ -70,8 +72,8 @@ public class SimulationController {
                 return;
             }
             robot.move(room);
-            robotXProperty.set(robot.getX());
-            robotYProperty.set(robot.getY());
+            // properties bound to robot will update automatically; update positionInfo and view sync.
+            positionInfoProperty.set(robot.getX() + "," + robot.getY());
             syncViewWithModel();
         }));
         simulationTimeline.setCycleCount(Timeline.INDEFINITE);

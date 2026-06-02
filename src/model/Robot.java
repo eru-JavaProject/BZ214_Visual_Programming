@@ -1,15 +1,24 @@
 package model;
 
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleObjectProperty;
+
 /**
  * Represents a vacuum robot with position, direction, and battery state.
  */
 public class Robot {
-    private int x;
-    private int y;
-    private Direction direction;
-    private double batteryLevel;
+    private final IntegerProperty xProperty;
+    private final IntegerProperty yProperty;
+    private final ObjectProperty<Direction> directionProperty;
+    private final DoubleProperty batteryLevelProperty;
     private final double maxBattery;
-    private boolean isCleaning;
+    private final BooleanProperty cleaningProperty;
 
     /**
      * Creates a robot at the given position and direction with a max battery capacity.
@@ -20,12 +29,12 @@ public class Robot {
      * @param maxBattery maximum battery capacity
      */
     public Robot(int startX, int startY, Direction startDir, double maxBattery) {
-        this.x = startX;
-        this.y = startY;
-        this.direction = startDir;
+        this.xProperty = new SimpleIntegerProperty(startX);
+        this.yProperty = new SimpleIntegerProperty(startY);
+        this.directionProperty = new SimpleObjectProperty<>(startDir);
         this.maxBattery = maxBattery;
-        this.batteryLevel = maxBattery;
-        this.isCleaning = false;
+        this.batteryLevelProperty = new SimpleDoubleProperty(maxBattery);
+        this.cleaningProperty = new SimpleBooleanProperty(false);
     }
 
     /**
@@ -36,15 +45,15 @@ public class Robot {
      * @param room the room to read walkability from
      */
     public void move(Room room) {
-        int nextX = x + direction.getDx();
-        int nextY = y + direction.getDy();
+        int nextX = getX() + getDirection().getDx();
+        int nextY = getY() + getDirection().getDy();
         boolean canMove = room != null && room.isValid(nextX, nextY) && room.isWalkable(nextX, nextY);
         if (canMove) {
-            x = nextX;
-            y = nextY;
+            setX(nextX);
+            setY(nextY);
             drainBattery(1.0);
         } else {
-            direction = direction.turnRight();
+            setDirection(getDirection().turnRight());
             drainBattery(0.5);
         }
     }
@@ -66,10 +75,7 @@ public class Robot {
      * @param amount amount to drain
      */
     public void drainBattery(double amount) {
-        batteryLevel -= amount;
-        if (batteryLevel < 0) {
-            batteryLevel = 0;
-        }
+        batteryLevelProperty.set(Math.max(0.0, batteryLevelProperty.get() - amount));
     }
 
     /**
@@ -78,10 +84,7 @@ public class Robot {
      * @param amount amount to charge
      */
     public void charge(double amount) {
-        batteryLevel += amount;
-        if (batteryLevel > maxBattery) {
-            batteryLevel = maxBattery;
-        }
+        batteryLevelProperty.set(Math.min(maxBattery, batteryLevelProperty.get() + amount));
     }
 
     /**
@@ -91,7 +94,7 @@ public class Robot {
      * @return true if battery is low
      */
     public boolean isBatteryLow(double threshold) {
-        return batteryLevel <= (maxBattery * threshold);
+        return batteryLevelProperty.get() <= (maxBattery * threshold);
     }
 
     /**
@@ -100,21 +103,21 @@ public class Robot {
      * @return battery percentage
      */
     public double getBatteryPercentage() {
-        return (batteryLevel / maxBattery) * 100.0;
+        return (batteryLevelProperty.get() / maxBattery) * 100.0;
     }
 
     /**
      * Marks the robot as cleaning.
      */
     public void startCleaning() {
-        isCleaning = true;
+        cleaningProperty.set(true);
     }
 
     /**
      * Marks the robot as not cleaning.
      */
     public void stopCleaning() {
-        isCleaning = false;
+        cleaningProperty.set(false);
     }
 
     /**
@@ -123,7 +126,11 @@ public class Robot {
      * @return x position
      */
     public int getX() {
-        return x;
+        return xProperty.get();
+    }
+
+    public void setX(int x) {
+        this.xProperty.set(x);
     }
 
     /**
@@ -132,7 +139,11 @@ public class Robot {
      * @return y position
      */
     public int getY() {
-        return y;
+        return yProperty.get();
+    }
+
+    public void setY(int y) {
+        this.yProperty.set(y);
     }
 
     /**
@@ -141,7 +152,11 @@ public class Robot {
      * @return direction
      */
     public Direction getDirection() {
-        return direction;
+        return directionProperty.get();
+    }
+
+    public void setDirection(Direction dir) {
+        this.directionProperty.set(dir);
     }
 
     /**
@@ -150,7 +165,11 @@ public class Robot {
      * @return battery level
      */
     public double getBatteryLevel() {
-        return batteryLevel;
+        return batteryLevelProperty.get();
+    }
+
+    public DoubleProperty batteryLevelProperty() {
+        return batteryLevelProperty;
     }
 
     /**
@@ -168,6 +187,23 @@ public class Robot {
      * @return true if cleaning
      */
     public boolean isCleaning() {
-        return isCleaning;
+        return cleaningProperty.get();
     }
+
+    public BooleanProperty cleaningProperty() {
+        return cleaningProperty;
+    }
+
+    public IntegerProperty xProperty() {
+        return xProperty;
+    }
+
+    public IntegerProperty yProperty() {
+        return yProperty;
+    }
+
+    public ObjectProperty<Direction> directionProperty() {
+        return directionProperty;
+    }
+
 }
