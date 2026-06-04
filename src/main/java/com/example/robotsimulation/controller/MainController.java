@@ -4,19 +4,27 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.layout.Pane;
+import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
-import javafx.scene.shape.Rectangle;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.geometry.Rectangle2D;
-import javafx.scene.control.Slider;
+import javafx.scene.control.ComboBox;
+import javafx.scene.layout.Pane;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.util.Duration;
+
+import com.example.robotsimulation.model.CleaningAlgorithm;
+import com.example.robotsimulation.model.Direction;
+import com.example.robotsimulation.model.DirtType;
+import com.example.robotsimulation.model.FurnitureType;
+import com.example.robotsimulation.model.Position;
+import com.example.robotsimulation.model.Robot;
+import com.example.robotsimulation.model.Room;
+
+import com.example.robotsimulation.service.SimulationService;
+import com.example.robotsimulation.view.RoomView;
+
+import java.util.List;
 
 public class MainController {
 
@@ -37,6 +45,9 @@ public class MainController {
 
     @FXML
     private Slider speedSlider;
+
+    @FXML
+    private Slider batterySlider;
 
     @FXML
     private Label speedValueLabel;
@@ -86,55 +97,97 @@ public class MainController {
     @FXML
     private Label collectedDustLabel;
 
-    private int robotCol = 10;
-    private int robotRow = 8;
+    @FXML
+    private ToggleButton randomToggleButton;
+
+    @FXML
+    private ToggleButton spiralToggleButton;
+
+    @FXML
+    private ToggleButton wallFollowToggleButton;
+
+    @FXML
+    private ComboBox<String> furnitureComboBox;
+
+    private final int columns = 20;
+    private final int rows = 14;
+
+    private CleaningAlgorithm selectedAlgorithm = CleaningAlgorithm.RANDOM;
+
+    private List<Position> pathToStation;
+    private boolean returningToStation = false;
+    private boolean chargingMode = false;
+
+    private int elapsedSeconds = 0;
+    private Timeline elapsedTimeline;
+
+    private RoomView roomView;
+    private Room room;
+    private Robot robot;
+    private SimulationService simulationService;
 
     private String selectedTool = "DIRT";
-
-    private final String[][] dirtGrid = new String[14][20];
-
-    private Image dustImage;
-    private Image liquidImage;
-    private Image stainImage;
-    private Image robotImage;
-    private Image chargingStationImage;
+    private FurnitureType selectedFurnitureType = FurnitureType.SOFA;
 
     private double robotSpeed = 1.0;
 
     private Timeline robotTimeline;
     private boolean simulationRunning = false;
 
-    private final boolean[][] furnitureGrid = new boolean[14][20];
-
-    private final int columns = 20;
-    private final int rows = 14;
-    private final double wallThickness = 24;
-
     @FXML
     public void initialize() {
+
+        roomView = new RoomView(rows, columns);
+        room = new Room(rows, columns);
+        robot = new Robot(8, 17);
+        simulationService = new SimulationService();
+
         robotPositionLabel.setText("(0, 0)");
         robotDirectionLabel.setText("Doğu →");
         batteryPercentLabel.setText("%100");
+        batterySlider.setValue(100);
+
         batteryProgressBar.setProgress(1.0);
 
         totalAreaLabel.setText("260 m²");
         cleanedAreaLabel.setText("0 m² (0%)");
         remainingAreaLabel.setText("260 m² (%100)");
-        elapsedTimeLabel.setText("00.00");
+        elapsedTimeLabel.setText("00:00");
         collectedDustLabel.setText("%0");
 
-        dustImage = new Image(getClass().getResourceAsStream("/images/dust.png"));
-        liquidImage = new Image(getClass().getResourceAsStream("/images/liquid.png"));
-        stainImage = new Image(getClass().getResourceAsStream("/images/stain.png"));
-        var robotStream = getClass().getResourceAsStream("/images/robot.png");
+        setupButtons();
+        setupFurnitureComboBox();
+        setupAlgorithmToggleButtons();
+        setupSpeedSlider();
+        setupRoomClickEvent();
 
-        if (robotStream == null) {
-            System.out.println("robot.png bulunamadı!");
-        } else {
-            robotImage = new Image(robotStream);
-            System.out.println("robot.png yüklendi: " + robotImage.getWidth() + " x " + robotImage.getHeight());
-        }
-        chargingStationImage = new Image(getClass().getResourceAsStream("/images/charging-station.png"));
+        batterySlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (batterySlider.isValueChanging()) {
+                int batteryValue = newVal.intValue();
+
+                robot.setBatteryLevel(batteryValue);
+                updateBatteryUI();
+
+                if (batteryValue > 20) {
+                    returningToStation = false;
+                    chargingMode = false;
+                }
+            }
+        });
+
+        addDirtButton.fire();
+
+        drawRoom();
+
+        roomPane.widthProperty().addListener((obs, oldVal, newVal) -> drawRoom());
+        roomPane.heightProperty().addListener((obs, oldVal, newVal) -> drawRoom());
+    }
+
+    private void setupButtons() {
+        returnStationButton.setOnAction(event -> {
+            pathToStation = simulationService.getPathToChargingStation(robot, room);
+            returningToStation = true;
+        });
 
         addDirtButton.setOnAction(event -> {
             selectedTool = "DIRT";
@@ -149,12 +202,86 @@ public class MainController {
             addDirtButton.setStyle("-fx-background-color: #1e88e5; -fx-text-fill: white; -fx-background-radius: 6; -fx-opacity: 0.55;");
             addFurnitureButton.setStyle("-fx-background-color: #2eaf5f; -fx-text-fill: white; -fx-background-radius: 6;");
         });
+    }
 
-        addDirtButton.fire();
+    private void setupFurnitureComboBox() {
+        furnitureComboBox.getItems().addAll(
+                "Kanepe",
+                "Masa",
+                "Orta Sehpa",
+                "Tekli Koltuk",
+                "Sandalye",
+                "Çiçek"
+        );
 
-        drawRoom();
+        furnitureComboBox.setValue("Kanepe");
 
+        furnitureComboBox.valueProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == null) {
+                return;
+            }
+
+            switch (newValue) {
+                case "Kanepe":
+                    selectedFurnitureType = FurnitureType.SOFA;
+                    break;
+
+                case "Masa":
+                    selectedFurnitureType = FurnitureType.TABLE;
+                    break;
+
+                case "Orta Sehpa":
+                    selectedFurnitureType = FurnitureType.COFFEE_TABLE;
+                    break;
+
+                case "Tekli Koltuk":
+                    selectedFurnitureType = FurnitureType.ARMCHAIR;
+                    break;
+
+                case "Sandalye":
+                    selectedFurnitureType = FurnitureType.CHAIR;
+                    break;
+
+                case "Çiçek":
+                    selectedFurnitureType = FurnitureType.FLOWER;
+                    break;
+            }
+        });
+    }
+
+    private void setupAlgorithmToggleButtons() {
+        ToggleGroup algorithmToggleGroup = new ToggleGroup();
+
+        randomToggleButton.setToggleGroup(algorithmToggleGroup);
+        spiralToggleButton.setToggleGroup(algorithmToggleGroup);
+        wallFollowToggleButton.setToggleGroup(algorithmToggleGroup);
+
+        randomToggleButton.setSelected(true);
+        selectedAlgorithm = CleaningAlgorithm.RANDOM;
+
+        randomToggleButton.setOnAction(event -> selectedAlgorithm = CleaningAlgorithm.RANDOM);
+        spiralToggleButton.setOnAction(event -> selectedAlgorithm = CleaningAlgorithm.SPIRAL);
+        wallFollowToggleButton.setOnAction(event -> selectedAlgorithm = CleaningAlgorithm.WALL_FOLLOW);
+    }
+
+    private void setupSpeedSlider() {
+        robotSpeed = speedSlider.getValue();
+        speedValueLabel.setText(String.format("%.1fx", robotSpeed));
+
+        speedSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            robotSpeed = newVal.doubleValue();
+            speedValueLabel.setText(String.format("%.1fx", robotSpeed));
+
+            if (robotTimeline != null) {
+                robotTimeline.setRate(robotSpeed);
+            }
+        });
+    }
+
+    private void setupRoomClickEvent() {
         roomPane.setOnMouseClicked(event -> {
+            double wallThickness = roomView.getWallThickness();
+
             double availableWidth = roomPane.getWidth() - (wallThickness * 2);
             double availableHeight = roomPane.getHeight() - (wallThickness * 2);
 
@@ -173,19 +300,6 @@ public class MainController {
                 handleCellClick(clickedRow, clickedCol);
             }
         });
-
-        roomPane.widthProperty().addListener((obs, oldVal, newVal) -> drawRoom());
-        roomPane.heightProperty().addListener((obs, oldVal, newVal) -> drawRoom());
-
-        robotSpeed = speedSlider.getValue();
-        speedValueLabel.setText(String.format("%.1fx", robotSpeed));
-
-        speedSlider.valueProperty().addListener((obs, oldVal, newVal) ->
-        {
-            robotSpeed = newVal.doubleValue();
-            speedValueLabel.setText(String.format("%.1fx", robotSpeed));
-        });
-
     }
 
     @FXML
@@ -197,11 +311,25 @@ public class MainController {
         }
 
         robotTimeline = new Timeline(
-                new KeyFrame(Duration.millis(1000 / robotSpeed), event -> moveRobot())
+                new KeyFrame(Duration.millis(1000), event -> moveRobot())
         );
 
         robotTimeline.setCycleCount(Timeline.INDEFINITE);
+        robotTimeline.setRate(robotSpeed);
         robotTimeline.play();
+
+        if (elapsedTimeline == null) {
+            elapsedTimeline = new Timeline(
+                    new KeyFrame(Duration.seconds(1), event -> {
+                        elapsedSeconds++;
+                        updateStatistics();
+                    })
+            );
+
+            elapsedTimeline.setCycleCount(Timeline.INDEFINITE);
+        }
+
+        elapsedTimeline.play();
 
         System.out.println("Simulation started");
     }
@@ -214,324 +342,290 @@ public class MainController {
             robotTimeline.pause();
         }
 
+        if (elapsedTimeline != null) {
+            elapsedTimeline.pause();
+        }
+
         System.out.println("Simulation paused");
     }
 
     @FXML
     private void onResetClicked() {
+        if (robotTimeline != null) {
+            robotTimeline.stop();
+        }
+
+        if (elapsedTimeline != null) {
+            elapsedTimeline.stop();
+            elapsedTimeline = null;
+        }
+
+        simulationService.resetWallFollowState();
+
+        room = new Room(rows, columns);
+        robot = new Robot(8, 17);
+
+        pathToStation = null;
+        returningToStation = false;
+        chargingMode = false;
+        simulationRunning = false;
+        elapsedSeconds = 0;
+
+        robot.setBatteryLevel(100);
+        updateBatteryUI();
+
+        elapsedTimeLabel.setText("00:00");
+
+        drawRoom();
+
         System.out.println("Simulation reset");
     }
 
     private void moveRobot() {
-        robotCol++;
 
-        if (robotCol >= robotCol) {
-            robotCol = 0;
-            robotRow++;
+        if (chargingMode) {
+            chargeRobot();
+            return;
         }
 
-        if (robotRow >= robotRow) {
-            robotRow = 0;
+        if (returningToStation) {
+            moveRobotToChargingStation();
+            return;
         }
 
-        drawGrid();
-
-        System.out.println("Robot moved: " + robotCol + "," + robotRow);
-    }
-
-    private void drawGrid() {
-        roomPane.getChildren().clear();
-
-        int columns = 20;
-        int rows = 14;
-        double wallThickness = 24;
-
-        double availableWidth = roomPane.getWidth() - (wallThickness * 2);
-        double availableHeight = roomPane.getHeight() - (wallThickness * 2);
-
-        double cellWidth = availableWidth / columns;
-        double cellHeight = availableHeight / rows;
-
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < columns; col++) {
-                javafx.scene.shape.Rectangle cell = new javafx.scene.shape.Rectangle();
-
-                cell.setX(wallThickness + col * cellWidth);
-                cell.setY(wallThickness + row * cellHeight);
-                cell.setWidth(cellWidth);
-                cell.setHeight(cellHeight);
-
-                cell.setFill(Color.TRANSPARENT);
-                cell.setStroke(Color.rgb(120, 80, 40, 0.35));
-
-                int clickedRow = row;
-                int clickedCol = col;
-
-                roomPane.getChildren().add(cell);
-            }
+        if (simulationService.shouldReturnToStation(robot)) {
+            pathToStation = simulationService.getPathToChargingStation(robot, room);
+            returningToStation = true;
+            System.out.println("Battery low. Returning to charging station.");
+            return;
         }
-    }
 
-    private void drawWalls() {
-        double width = roomPane.getWidth();
-        double height = roomPane.getHeight();
+        moveRobotWithObstacleControl();
 
-        double outerThickness = 20;
-        double innerThickness = 12;
+        drawRoom();
 
-        javafx.scene.paint.Color outerColor = javafx.scene.paint.Color.web("#1f1f1f");
-        javafx.scene.paint.Color wallColor = javafx.scene.paint.Color.web("#3a3a3a");
-        javafx.scene.paint.Color highlightColor = javafx.scene.paint.Color.web("#6b6b6b");
-
-        // dış koyu çerçeve
-        javafx.scene.shape.Rectangle outerTop = new javafx.scene.shape.Rectangle(0, 0, width, outerThickness);
-        javafx.scene.shape.Rectangle outerLeft = new javafx.scene.shape.Rectangle(0, 0, outerThickness, height);
-        javafx.scene.shape.Rectangle outerRight = new javafx.scene.shape.Rectangle(width - outerThickness, 0, outerThickness, height);
-        javafx.scene.shape.Rectangle outerBottom = new javafx.scene.shape.Rectangle(0, height - outerThickness, width, outerThickness);
-
-        outerTop.setFill(outerColor);
-        outerLeft.setFill(outerColor);
-        outerRight.setFill(outerColor);
-        outerBottom.setFill(outerColor);
-
-        // ana duvar gövdesi
-        javafx.scene.shape.Rectangle topWall = new javafx.scene.shape.Rectangle(8, 8, width - 16, innerThickness);
-        javafx.scene.shape.Rectangle leftWall = new javafx.scene.shape.Rectangle(8, 8, innerThickness, height - 16);
-        javafx.scene.shape.Rectangle rightWall = new javafx.scene.shape.Rectangle(width - 20, 8, innerThickness, height - 16);
-        javafx.scene.shape.Rectangle bottomWall = new javafx.scene.shape.Rectangle(8, height - 20, width - 16, innerThickness);
-
-        topWall.setFill(wallColor);
-        leftWall.setFill(wallColor);
-        rightWall.setFill(wallColor);
-        bottomWall.setFill(wallColor);
-
-        // yükseklik efekti için açık iç çizgiler
-        javafx.scene.shape.Line topHighlight = new javafx.scene.shape.Line(20, 20, width - 20, 20);
-        javafx.scene.shape.Line leftHighlight = new javafx.scene.shape.Line(20, 20, 20, height - 20);
-
-        topHighlight.setStroke(highlightColor);
-        leftHighlight.setStroke(highlightColor);
-        topHighlight.setStrokeWidth(2);
-        leftHighlight.setStrokeWidth(2);
-
-        roomPane.getChildren().addAll(
-                outerTop, outerLeft, outerRight, outerBottom,
-                topWall, leftWall, rightWall, bottomWall,
-                topHighlight, leftHighlight
+        System.out.println(
+                "Robot moved: " +
+                        robot.getPosition().getCol() + "," +
+                        robot.getPosition().getRow()
         );
     }
 
-    private void drawChargingStation() {
-        double availableWidth = roomPane.getWidth() - (wallThickness * 2);
-        double availableHeight = roomPane.getHeight() - (wallThickness * 2);
+    private void chargeRobot() {
+        if (robot.getBatteryLevel() < 100) {
+            robot.setBatteryLevel(
+                    Math.min(100, robot.getBatteryLevel() + 3)
+            );
 
-        double cellWidth = availableWidth / columns;
-        double cellHeight = availableHeight / rows;
-
-        int stationCol = 3;
-        int stationRow = 0;
-
-        double x = wallThickness + stationCol * cellWidth;
-        double y = wallThickness + stationRow * cellHeight;
-
-        ImageView stationView = new ImageView(chargingStationImage);
-
-        double stationSize = Math.min(cellWidth, cellHeight) * 2.8;
-
-        stationView.setFitWidth(stationSize);
-        stationView.setFitHeight(stationSize);
-        stationView.setPreserveRatio(true);
-
-        double offsetX = 0;
-        double offsetY = 8;
-
-        stationView.setX(x + (cellWidth - stationSize) / 2 + offsetX);
-        stationView.setY(y + (cellHeight - stationSize) / 2 + offsetY);
-
-        roomPane.getChildren().add(stationView);
-    }
-
-    private void drawRobot() {
-        double availableWidth = roomPane.getWidth() - (wallThickness * 2);
-        double availableHeight = roomPane.getHeight() - (wallThickness * 2);
-
-        double cellWidth = availableWidth / columns;
-        double cellHeight = availableHeight / rows;
-
-        double x = wallThickness + robotCol * cellWidth;
-        double y = wallThickness + robotRow * cellHeight;
-
-        if (robotImage == null || robotImage.isError()) {
-            System.out.println("Robot görseli çizilemedi, eski robot çiziliyor.");
-            drawDefaultRobot(x, y, cellWidth, cellHeight);
+            drawRoom();
             return;
         }
 
-        ImageView robotView = new ImageView(robotImage);
-        double robotSize = Math.min(cellWidth, cellHeight) * 2.25;
-
-        robotView.setFitWidth(robotSize);
-        robotView.setFitHeight(robotSize);
-        robotView.setPreserveRatio(true);
-
-        double offsetX = 0;
-        double offsetY = 12;
-
-        robotView.setX(x + (cellWidth - robotSize) / 2 + offsetX);
-        robotView.setY(y + (cellHeight - robotSize) / 2 + offsetY);
-
-        roomPane.getChildren().add(robotView);
+        chargingMode = false;
+        System.out.println("Battery fully charged.");
     }
 
-    private void drawDefaultRobot(double x, double y, double cellWidth, double cellHeight) {
-        Circle robotBody = new Circle();
-        robotBody.setCenterX(x + cellWidth / 2);
-        robotBody.setCenterY(y + cellHeight / 2);
-        robotBody.setRadius(Math.min(cellWidth, cellHeight) * 0.35);
-        robotBody.setFill(Color.web("#eceff1"));
-        robotBody.setStroke(Color.web("#263238"));
-        robotBody.setStrokeWidth(3);
+    private void moveRobotToChargingStation() {
+        if (pathToStation != null && !pathToStation.isEmpty()) {
+            Position nextPosition = pathToStation.remove(0);
 
-        roomPane.getChildren().add(robotBody);
-    }
-
-    private void updateRobotStatus() {
-        robotPositionLabel.setText("(" + robotCol + ", " + robotRow + ")");
-        robotDirectionLabel.setText("Doğu →");
-    }
-
-    private void handleCellClick(int row, int col) {
-        if (row == robotRow && col == robotCol) {
-            return;
-        }
-
-        if (row == 12 && col == 0) {
-            return;
-        }
-
-        if (selectedTool.equals("DIRT")) {
-            if (furnitureGrid[row][col]) {
+            if (!canRobotMoveTo(nextPosition) && !isChargingStationPosition(nextPosition)) {
+                System.out.println("Return path blocked. Recalculating path...");
+                pathToStation = simulationService.getPathToChargingStation(robot, room);
                 return;
             }
 
-            dirtGrid[row][col] = getSelectedDirtType();
-            System.out.println("Added dirt type: " + dirtGrid[row][col]);
+            updateRobotDirectionForPath(nextPosition);
+
+            robot.setPosition(nextPosition);
+            markRobotVisitedCell(nextPosition);
+
+            robot.setBatteryLevel(robot.getBatteryLevel() - 1);
+
+            drawRoom();
+            return;
+        }
+
+        returningToStation = false;
+        chargingMode = true;
+
+        System.out.println("Robot charging station'a ulaştı.");
+        drawRoom();
+    }
+
+    private void moveRobotWithObstacleControl() {
+        Position oldPosition = robot.getPosition();
+
+        simulationService.moveRobot(robot, room, selectedAlgorithm);
+
+        Position newPosition = robot.getPosition();
+
+        if (!canRobotMoveTo(newPosition)) {
+            robot.setPosition(oldPosition);
+            System.out.println("Obstacle detected. Robot stayed in place.");
+            return;
+        }
+
+        markRobotVisitedCell(newPosition);
+
+        if (room.getCell(newPosition.getRow(), newPosition.getCol()).hasDirt()) {
+            room.getCell(newPosition.getRow(), newPosition.getCol()).clearDirt();
+        }
+
+        robot.setBatteryLevel(robot.getBatteryLevel() - 1);
+    }
+
+    private boolean canRobotMoveTo(Position position) {
+        return room.isCellWalkable(position.getRow(), position.getCol());
+    }
+
+    private boolean isChargingStationPosition(Position position) {
+        Position stationPosition = room.getChargingStationPosition();
+
+        return stationPosition != null
+                && stationPosition.getRow() == position.getRow()
+                && stationPosition.getCol() == position.getCol();
+    }
+
+    private void markRobotVisitedCell(Position position) {
+        room.getCell(position.getRow(), position.getCol()).setVisitedByRobot(true);
+        room.getCell(position.getRow(), position.getCol()).setVisitDirection(robot.getDirection());
+    }
+
+    private void updateBatteryUI() {
+        int batteryValue = robot.getBatteryLevel();
+
+        batteryPercentLabel.setText("%" + batteryValue);
+        batteryProgressBar.setProgress(batteryValue / 100.0);
+
+        if (batterySlider != null && (int) batterySlider.getValue() != batteryValue) {
+            batterySlider.setValue(batteryValue);
+        }
+    }
+
+    private void updateRobotStatus() {
+        Position position = robot.getPosition();
+
+        robotPositionLabel.setText("(" + position.getCol() + ", " + position.getRow() + ")");
+
+        switch (robot.getDirection()) {
+            case RIGHT:
+                robotDirectionLabel.setText("Doğu →");
+                break;
+
+            case LEFT:
+                robotDirectionLabel.setText("Batı ←");
+                break;
+
+            case UP:
+                robotDirectionLabel.setText("Kuzey ↑");
+                break;
+
+            case DOWN:
+                robotDirectionLabel.setText("Güney ↓");
+                break;
+        }
+
+        updateBatteryUI();
+    }
+
+    private void handleCellClick(int row, int col) {
+        Position robotPosition = robot.getPosition();
+
+        if (row == robotPosition.getRow() && col == robotPosition.getCol()) {
+            return;
+        }
+
+        boolean success = false;
+
+        if (selectedTool.equals("DIRT")) {
+            success = room.addDirt(row, col, getSelectedDirtType());
+
+            if (success) {
+                System.out.println("Added dirt type: " + getSelectedDirtType());
+            } else {
+                System.out.println("Dirt could not be added to this cell.");
+            }
         }
 
         if (selectedTool.equals("FURNITURE")) {
-            dirtGrid[row][col] = null;
-            furnitureGrid[row][col] = true;
+            success = room.addFurniture(row, col, selectedFurnitureType);
+
+            if (success) {
+                System.out.println("Added furniture: " + selectedFurnitureType);
+            } else {
+                System.out.println("Furniture could not be added to this cell.");
+            }
         }
 
         drawRoom();
     }
 
-    private String getSelectedDirtType() {
+    private DirtType getSelectedDirtType() {
         if (dustButton.isSelected()) {
-            return "DUST";
+            return DirtType.DUST;
         }
 
         if (liquidButton.isSelected()) {
-            return "LIQUID";
+            return DirtType.LIQUID;
         }
 
         if (stainButton.isSelected()) {
-            return "STAIN";
+            return DirtType.STAIN;
         }
 
-        return "DUST";
+        return DirtType.DUST;
     }
 
-    private void drawDirt() {
-        double availableWidth = roomPane.getWidth() - (wallThickness * 2);
-        double availableHeight = roomPane.getHeight() - (wallThickness * 2);
+    private void updateStatistics() {
+        int totalArea = room.getCleanableCellCount();
+        int remainingDirtyArea = room.getDirtyCellCount();
+        int cleanedArea = totalArea - remainingDirtyArea;
 
-        double cellWidth = availableWidth / columns;
-        double cellHeight = availableHeight / rows;
+        double cleanedPercentage = 0;
 
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < columns; col++) {
-                String dirtType = dirtGrid[row][col];
-
-                if (dirtType == null) {
-                    continue;
-                }
-
-                double x = wallThickness + col * cellWidth;
-                double y = wallThickness + row * cellHeight;
-
-                Image selectedImage;
-
-                if (dirtType.equals("DUST")) {
-                    selectedImage = dustImage;
-                } else if (dirtType.equals("LIQUID")) {
-                    selectedImage = liquidImage;
-                } else {
-                    selectedImage = stainImage;
-                }
-
-                ImageView dirtView = new ImageView(selectedImage);
-
-                dirtView.setViewport(new Rectangle2D(
-                        390, 180,
-                        780, 520
-                ));
-
-                double dirtWidth = cellWidth * 0.95;
-                double dirtHeight = cellHeight * 0.75;
-
-                dirtView.setFitWidth(dirtWidth);
-                dirtView.setFitHeight(dirtHeight);
-                dirtView.setPreserveRatio(true);
-
-                dirtView.setX(x + (cellWidth - dirtWidth) / 2);
-                dirtView.setY(y + (cellHeight - dirtHeight) / 2);
-                roomPane.getChildren().add(dirtView);
-            }
+        if (totalArea > 0) {
+            cleanedPercentage = (cleanedArea * 100.0) / totalArea;
         }
+
+        totalAreaLabel.setText(totalArea + " m²");
+        cleanedAreaLabel.setText(
+                cleanedArea + " m² (" + String.format("%.0f", cleanedPercentage) + "%)"
+        );
+        remainingAreaLabel.setText(
+                remainingDirtyArea + " m² (%" + String.format("%.0f", 100 - cleanedPercentage) + ")"
+        );
+        collectedDustLabel.setText("%" + String.format("%.0f", cleanedPercentage));
+
+        int minutes = elapsedSeconds / 60;
+        int seconds = elapsedSeconds % 60;
+
+        elapsedTimeLabel.setText(
+                String.format("%02d:%02d", minutes, seconds)
+        );
     }
 
-    private void drawFurniture() {
-        double availableWidth = roomPane.getWidth() - (wallThickness * 2);
-        double availableHeight = roomPane.getHeight() - (wallThickness * 2);
+    private void updateRobotDirectionForPath(Position nextPosition) {
+        Position currentPosition = robot.getPosition();
 
-        double cellWidth = availableWidth / columns;
-        double cellHeight = availableHeight / rows;
+        int rowDifference = nextPosition.getRow() - currentPosition.getRow();
+        int colDifference = nextPosition.getCol() - currentPosition.getCol();
 
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < columns; col++) {
-                if (!furnitureGrid[row][col]) {
-                    continue;
-                }
-
-                double x = wallThickness + col * cellWidth + 4;
-                double y = wallThickness + row * cellHeight + 4;
-
-                Rectangle furniture = new Rectangle();
-                furniture.setX(x);
-                furniture.setY(y);
-                furniture.setWidth(cellWidth - 8);
-                furniture.setHeight(cellHeight - 8);
-                furniture.setArcWidth(10);
-                furniture.setArcHeight(10);
-                furniture.setFill(Color.web("#8d6e63"));
-                furniture.setStroke(Color.web("#4e342e"));
-                furniture.setStrokeWidth(2);
-
-                roomPane.getChildren().add(furniture);
-            }
+        if (colDifference == 1) {
+            robot.setDirection(Direction.RIGHT);
+        } else if (colDifference == -1) {
+            robot.setDirection(Direction.LEFT);
+        } else if (rowDifference == 1) {
+            robot.setDirection(Direction.DOWN);
+        } else if (rowDifference == -1) {
+            robot.setDirection(Direction.UP);
         }
     }
 
     private void drawRoom() {
-        roomPane.getChildren().clear();
+        roomView.drawRoom(roomPane, room, robot);
 
-        drawGrid();
-        drawFurniture();
-        drawDirt();
-        drawWalls();
-        drawChargingStation();
-        drawRobot();
         updateRobotStatus();
+        updateStatistics();
     }
 }

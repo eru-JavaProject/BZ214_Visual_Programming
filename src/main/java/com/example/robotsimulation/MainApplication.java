@@ -16,6 +16,7 @@ public class MainApplication extends Application {
 
         stage.setTitle("Robot Vacuum Cleaning Simulation");
         stage.setScene(scene);
+        stage.setMaximized(true);
         stage.show();
     }
 
