@@ -39,3 +39,5 @@ bin/
 # macOS
 .DS_Store
 
+/target/
+
