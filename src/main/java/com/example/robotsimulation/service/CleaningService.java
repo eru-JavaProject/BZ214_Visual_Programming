@@ -36,7 +36,7 @@ public class CleaningService {
         }
 
         if (dirtType == DirtType.STAIN) {
-            return 3;
+            return 4;
         }
 
         return 1;

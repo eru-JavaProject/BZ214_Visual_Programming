@@ -31,7 +31,7 @@ public class PathFindingService {
 
                 boolean isTargetCell = newRow == target.getRow() && newCol == target.getCol();
 
-                if ((room.isCellWalkable(newRow, newCol) || isTargetCell) && !visited[newRow][newCol]) {
+                if (room.isInsideRoom(newRow, newCol) && (room.isCellWalkable(newRow, newCol) || isTargetCell) && !visited[newRow][newCol]) {
                     Position next = new Position(newRow, newCol);
                     queue.add(next);
                     visited[newRow][newCol] = true;

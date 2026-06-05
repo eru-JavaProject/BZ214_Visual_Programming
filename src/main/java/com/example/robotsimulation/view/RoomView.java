@@ -10,6 +10,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import com.example.robotsimulation.model.Direction;
 import com.example.robotsimulation.model.Furniture;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RoomView {
 
@@ -24,6 +26,8 @@ public class RoomView {
     private Image robotImage;
     private Image chargingStationImage;
 
+    private Map<FurnitureType, Image> furnitureImages = new HashMap<>();
+
     public RoomView(int rows, int columns) {
         this.rows = rows;
         this.columns = columns;
@@ -33,6 +37,13 @@ public class RoomView {
         stainImage = new Image(getClass().getResourceAsStream("/images/stain.png"));
         robotImage = new Image(getClass().getResourceAsStream("/images/robot.png"));
         chargingStationImage = new Image(getClass().getResourceAsStream("/images/charging-station.png"));
+
+        for (FurnitureType type : FurnitureType.values()) {
+            furnitureImages.put(
+                    type,
+                    new Image(getClass().getResourceAsStream("/" + type.getImagePath()))
+            );
+        }
     }
 
     private void drawGrid(Pane roomPane) {
@@ -214,10 +225,7 @@ public class RoomView {
                 double x = wallThickness + col * cellWidth;
                 double y = wallThickness + row * cellHeight;
 
-                Image furnitureImage = new Image(
-                        getClass().getResourceAsStream("/" + furniture.getType().getImagePath())
-                );
-
+                Image furnitureImage = furnitureImages.get(furniture.getType());
                 ImageView furnitureView = new ImageView(furnitureImage);
 
                 double furnitureWidth = cellWidth * furniture.getType().getWidthInCells();

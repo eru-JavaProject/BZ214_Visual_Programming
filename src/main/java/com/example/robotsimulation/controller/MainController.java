@@ -1,6 +1,7 @@
 package com.example.robotsimulation.controller;
 
 import javafx.fxml.FXML;
+import java.util.List;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
@@ -23,8 +24,6 @@ import com.example.robotsimulation.model.Room;
 
 import com.example.robotsimulation.service.SimulationService;
 import com.example.robotsimulation.view.RoomView;
-
-import java.util.List;
 
 public class MainController {
 
@@ -265,17 +264,39 @@ public class MainController {
     }
 
     private void setupSpeedSlider() {
+        speedSlider.setMin(0.5);
+        speedSlider.setMax(2.0);
+
+        if (speedSlider.getValue() > 2.0) {
+            speedSlider.setValue(2.0);
+        }
+
         robotSpeed = speedSlider.getValue();
         speedValueLabel.setText(String.format("%.1fx", robotSpeed));
 
         speedSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            robotSpeed = newVal.doubleValue();
+            robotSpeed = Math.min(newVal.doubleValue(), 2.0);
             speedValueLabel.setText(String.format("%.1fx", robotSpeed));
 
-            if (robotTimeline != null) {
-                robotTimeline.setRate(robotSpeed);
+            if (simulationRunning) {
+                restartRobotTimeline();
             }
         });
+    }
+
+    private void restartRobotTimeline() {
+        if (robotTimeline != null) {
+            robotTimeline.stop();
+        }
+
+        double interval = 1000.0 / robotSpeed;
+
+        robotTimeline = new Timeline(
+                new KeyFrame(Duration.millis(interval), event -> moveRobot())
+        );
+
+        robotTimeline.setCycleCount(Timeline.INDEFINITE);
+        robotTimeline.play();
     }
 
     private void setupRoomClickEvent() {
@@ -310,13 +331,7 @@ public class MainController {
             robotTimeline.stop();
         }
 
-        robotTimeline = new Timeline(
-                new KeyFrame(Duration.millis(1000), event -> moveRobot())
-        );
-
-        robotTimeline.setCycleCount(Timeline.INDEFINITE);
-        robotTimeline.setRate(robotSpeed);
-        robotTimeline.play();
+        restartRobotTimeline();
 
         if (elapsedTimeline == null) {
             elapsedTimeline = new Timeline(
@@ -389,14 +404,20 @@ public class MainController {
         }
 
         if (returningToStation) {
+            if (simulationService.cleanIfCurrentCellDirty(robot, room)) {
+                drawRoom();
+                return;
+            }
+
             moveRobotToChargingStation();
             return;
         }
 
-        if (simulationService.shouldReturnToStation(robot)) {
+        if (simulationService.shouldReturnToStation(robot, room)) {
             pathToStation = simulationService.getPathToChargingStation(robot, room);
             returningToStation = true;
             System.out.println("Battery low. Returning to charging station.");
+            drawRoom();
             return;
         }
 
@@ -426,6 +447,21 @@ public class MainController {
     }
 
     private void moveRobotToChargingStation() {
+
+        if (robot.getBatteryLevel() <= 0) {
+            returningToStation = false;
+            chargingMode = false;
+            pathToStation = null;
+            System.out.println("Battery empty. Robot stopped.");
+            drawRoom();
+            return;
+        }
+
+        if (simulationService.cleanIfCurrentCellDirty(robot, room)) {
+            drawRoom();
+            return;
+        }
+
         if (pathToStation != null && !pathToStation.isEmpty()) {
             Position nextPosition = pathToStation.remove(0);
 
@@ -440,7 +476,7 @@ public class MainController {
             robot.setPosition(nextPosition);
             markRobotVisitedCell(nextPosition);
 
-            robot.setBatteryLevel(robot.getBatteryLevel() - 1);
+            robot.setBatteryLevel(Math.max(0, robot.getBatteryLevel() - 1));
 
             drawRoom();
             return;
@@ -468,11 +504,6 @@ public class MainController {
 
         markRobotVisitedCell(newPosition);
 
-        if (room.getCell(newPosition.getRow(), newPosition.getCol()).hasDirt()) {
-            room.getCell(newPosition.getRow(), newPosition.getCol()).clearDirt();
-        }
-
-        robot.setBatteryLevel(robot.getBatteryLevel() - 1);
     }
 
     private boolean canRobotMoveTo(Position position) {
@@ -549,9 +580,14 @@ public class MainController {
         }
 
         if (selectedTool.equals("FURNITURE")) {
+            if (doesFurnitureCoverRobot(row, col, selectedFurnitureType)) {
+                System.out.println("Furniture cannot be added on the robot.");
+                return;
+            }
             success = room.addFurniture(row, col, selectedFurnitureType);
 
             if (success) {
+                simulationService.resetWallFollowState();
                 System.out.println("Added furniture: " + selectedFurnitureType);
             } else {
                 System.out.println("Furniture could not be added to this cell.");
@@ -559,6 +595,18 @@ public class MainController {
         }
 
         drawRoom();
+    }
+
+    private boolean doesFurnitureCoverRobot(int row, int col, FurnitureType furnitureType) {
+        Position robotPosition = robot.getPosition();
+
+        int endRow = row + furnitureType.getHeightInCells();
+        int endCol = col + furnitureType.getWidthInCells();
+
+        return robotPosition.getRow() >= row
+                && robotPosition.getRow() < endRow
+                && robotPosition.getCol() >= col
+                && robotPosition.getCol() < endCol;
     }
 
     private DirtType getSelectedDirtType() {

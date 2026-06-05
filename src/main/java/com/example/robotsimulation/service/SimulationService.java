@@ -20,9 +20,16 @@ public class SimulationService {
     private List<Position> wallBypassPath = null;
 
     public void moveRobot(Robot robot, Room room, CleaningAlgorithm algorithm) {
+
+        if (robot.getBatteryLevel() <= 0) {
+            return;
+        }
+
         if (visitCounts == null) {
             visitCounts = new int[room.getRows()][room.getColumns()];
         }
+
+        startCleaningIfNeeded(robot, room);
 
         if (robot.getCleaningTimeRemaining() > 0) {
             robot.setCleaningTimeRemaining(robot.getCleaningTimeRemaining() - 1);
@@ -55,7 +62,11 @@ public class SimulationService {
             startCleaningIfNeeded(robot, room);
 
         } else {
-            Direction alternativeDirection = findBestDirection(robot, room);
+            Direction alternativeDirection = findObstacleBypassDirection(robot, room, robot.getDirection());
+
+            if (alternativeDirection == null) {
+                alternativeDirection = findBestDirection(robot, room);
+            }
 
             if (alternativeDirection != null) {
                 robot.setDirection(alternativeDirection);
@@ -75,6 +86,32 @@ public class SimulationService {
                 }
             }
         }
+    }
+
+    private Direction findObstacleBypassDirection(Robot robot, Room room, Direction blockedDirection) {
+        Position rejoinPosition = findRejoinPositionAfterObstacle(robot, room, blockedDirection);
+
+        if (rejoinPosition == null) {
+            return null;
+        }
+
+        List<Position> bypassPath = pathFindingService.findShortestPath(
+                room,
+                robot.getPosition(),
+                rejoinPosition
+        );
+
+        if (bypassPath == null || bypassPath.isEmpty()) {
+            return null;
+        }
+
+        Position nextStep = bypassPath.get(0);
+
+        if (!room.isCellWalkable(nextStep.getRow(), nextStep.getCol())) {
+            return null;
+        }
+
+        return getDirectionFromTo(robot.getPosition(), nextStep);
     }
 
     private Direction findBestDirection(Robot robot, Room room) {
@@ -135,8 +172,32 @@ public class SimulationService {
         );
     }
 
-    public boolean shouldReturnToStation(Robot robot) {
-        return batteryService.isBatteryLow(robot);
+    public boolean shouldReturnToStation(Robot robot, Room room) {
+        if (!batteryService.isBatteryLow(robot)) {
+            return false;
+        }
+
+        if (robot.getCleaningTimeRemaining() > 0) {
+            return false;
+        }
+
+        Position currentPosition = robot.getPosition();
+
+        if (room.getCell(currentPosition.getRow(), currentPosition.getCol()).hasDirt()) {
+            return false;
+        }
+
+        Position nextPosition = getNextPosition(robot);
+        int nextRow = nextPosition.getRow();
+        int nextCol = nextPosition.getCol();
+
+        if (room.isInsideRoom(nextRow, nextCol)
+                && room.isCellWalkable(nextRow, nextCol)
+                && room.getCell(nextRow, nextCol).hasDirt()) {
+            return false;
+        }
+
+        return true;
     }
 
     private Direction chooseDirection(Robot robot, Room room, CleaningAlgorithm algorithm) {
@@ -152,15 +213,44 @@ public class SimulationService {
     }
 
     private Direction findRandomDirection(Robot robot, Room room) {
-        Direction[] directions = Direction.values();
 
-        for (int i = 0; i < directions.length * 2; i++) {
-            Direction direction = directions[random.nextInt(directions.length)];
+        Direction oppositeDirection = getOppositeDirection(robot.getDirection());
+
+        Direction bestDirection = null;
+        int bestScore = Integer.MAX_VALUE;
+
+        for (Direction direction : Direction.values()) {
+
+            if (direction == oppositeDirection) {
+                continue;
+            }
+
             Position nextPosition = getNextPosition(robot, direction);
 
-            if (room.isCellWalkable(nextPosition.getRow(), nextPosition.getCol())) {
-                return direction;
+            int row = nextPosition.getRow();
+            int col = nextPosition.getCol();
+
+            if (!room.isCellWalkable(row, col)) {
+                continue;
             }
+
+            int score = visitCounts[row][col] * 3;
+            score += random.nextInt(5);
+
+            if (score < bestScore) {
+                bestScore = score;
+                bestDirection = direction;
+            }
+        }
+
+        if (bestDirection != null) {
+            return bestDirection;
+        }
+
+        Position backPosition = getNextPosition(robot, oppositeDirection);
+
+        if (room.isCellWalkable(backPosition.getRow(), backPosition.getCol())) {
+            return oppositeDirection;
         }
 
         return findBestDirection(robot, room);
@@ -171,6 +261,11 @@ public class SimulationService {
 
         int row = position.getRow();
         int col = position.getCol();
+
+        Direction bypassDirection = getNextWallBypassDirection(robot, room);
+        if (bypassDirection != null) {
+            return bypassDirection;
+        }
 
         if (!wallReached) {
             Direction directionToNearestWall = getDirectionToNearestWall(position, room);
@@ -207,11 +302,32 @@ public class SimulationService {
         return getDirectionToNearestWall(position, room);
     }
 
+    private Direction getNextWallBypassDirection(Robot robot, Room room) {
+        if (wallBypassPath == null || wallBypassPath.isEmpty()) {
+            return null;
+        }
+
+        Position nextStep = wallBypassPath.remove(0);
+
+        if (isAdjacent(robot.getPosition(), nextStep)
+                && room.isCellWalkable(nextStep.getRow(), nextStep.getCol())) {
+            return getDirectionFromTo(robot.getPosition(), nextStep);
+        }
+
+        wallBypassPath = null;
+        return null;
+    }
+
     private Direction getWallFollowDirectionWithObstacleBypass(Robot robot, Room room, Direction wallDirection) {
 
         if (wallBypassPath != null && !wallBypassPath.isEmpty()) {
             Position nextStep = wallBypassPath.remove(0);
-            return getDirectionFromTo(robot.getPosition(), nextStep);
+
+            if (room.isCellWalkable(nextStep.getRow(), nextStep.getCol())) {
+                return getDirectionFromTo(robot.getPosition(), nextStep);
+            }
+
+            wallBypassPath = null;
         }
 
         Position nextPosition = getNextPosition(robot, wallDirection);
@@ -230,12 +346,7 @@ public class SimulationService {
             );
 
             if (wallBypassPath != null && !wallBypassPath.isEmpty()) {
-                wallBypassPath.remove(0);
-
-                if (!wallBypassPath.isEmpty()) {
-                    Position nextStep = wallBypassPath.remove(0);
-                    return getDirectionFromTo(robot.getPosition(), nextStep);
-                }
+                return getNextWallBypassDirection(robot, room);
             }
         }
 
@@ -249,38 +360,63 @@ public class SimulationService {
         int col = position.getCol();
 
         if (wallDirection == Direction.RIGHT) {
-            for (int c = col + 1; c < room.getColumns(); c++) {
-                if (room.isCellWalkable(row, c)) {
-                    return new Position(row, c);
+            for (int c = col + 2; c < room.getColumns(); c++) {
+                Position candidate = new Position(row, c);
+
+                if (room.isCellWalkable(row, c)
+                        && hasValidPathTo(room, robot.getPosition(), candidate)) {
+                    return candidate;
                 }
             }
         }
 
         if (wallDirection == Direction.LEFT) {
-            for (int c = col - 1; c >= 0; c--) {
-                if (room.isCellWalkable(row, c)) {
-                    return new Position(row, c);
+            for (int c = col - 2; c >= 0; c--) {
+                Position candidate = new Position(row, c);
+
+                if (room.isCellWalkable(row, c)
+                        && hasValidPathTo(room, robot.getPosition(), candidate)) {
+                    return candidate;
                 }
             }
         }
 
         if (wallDirection == Direction.DOWN) {
-            for (int r = row + 1; r < room.getRows(); r++) {
-                if (room.isCellWalkable(r, col)) {
-                    return new Position(r, col);
+            for (int r = row + 2; r < room.getRows(); r++) {
+                Position candidate = new Position(r, col);
+
+                if (room.isCellWalkable(r, col)
+                        && hasValidPathTo(room, robot.getPosition(), candidate)) {
+                    return candidate;
                 }
             }
         }
 
         if (wallDirection == Direction.UP) {
-            for (int r = row - 1; r >= 0; r--) {
-                if (room.isCellWalkable(r, col)) {
-                    return new Position(r, col);
+            for (int r = row - 2; r >= 0; r--) {
+                Position candidate = new Position(r, col);
+
+                if (room.isCellWalkable(r, col)
+                        && hasValidPathTo(room, robot.getPosition(), candidate)) {
+                    return candidate;
                 }
             }
         }
 
         return null;
+    }
+
+    private boolean hasValidPathTo(Room room, Position start, Position target) {
+        List<Position> path = pathFindingService.findShortestPath(room, start, target);
+
+        return path != null && path.size() > 1;
+    }
+
+    private boolean isAdjacent(Position current, Position next) {
+        int rowDifference = Math.abs(current.getRow() - next.getRow());
+        int colDifference = Math.abs(current.getCol() - next.getCol());
+
+        return rowDifference + colDifference == 1;
     }
 
     private Direction getDirectionFromTo(Position current, Position next) {
@@ -349,7 +485,33 @@ public class SimulationService {
         wallBypassPath = null;
     }
 
+    public boolean cleanIfCurrentCellDirty(Robot robot, Room room) {
+        Position position = robot.getPosition();
+
+        if (room.getCell(position.getRow(), position.getCol()).hasDirt()) {
+            if (robot.getCleaningTimeRemaining() == 0) {
+                startCleaningIfNeeded(robot, room);
+            }
+
+            if (robot.getCleaningTimeRemaining() > 0) {
+                robot.setCleaningTimeRemaining(robot.getCleaningTimeRemaining() - 1);
+
+                if (robot.getCleaningTimeRemaining() == 0) {
+                    cleaningService.cleanCurrentCell(robot, room);
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void startCleaningIfNeeded(Robot robot, Room room) {
+        if (robot.getCleaningTimeRemaining() > 0) {
+            return;
+        }
+
         Position position = robot.getPosition();
 
         if (room.getCell(position.getRow(), position.getCol()).hasDirt()) {
