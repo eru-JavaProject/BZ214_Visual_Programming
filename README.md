@@ -188,8 +188,8 @@ This project was developed as an educational assignment. Contributions for impro
 ## Course Information
 
 **Course**: BZ 214 Visual Programming  
-**Institution**: [Your Institution Name]  
-**Academic Year**: [Year]
+**Institution**: Erciyes Üniversitesi
+**Academic Year**: 2026
 
 ## License
 
@@ -201,5 +201,5 @@ For issues, questions, or suggestions, please refer to the project documentation
 
 ---
 
-**Last Updated**: June 2026  
+**Last Updated**: 6 June 2026  
 **Version**: 1.0.0
