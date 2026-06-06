@@ -302,7 +302,7 @@ If BatteryLevel <= 20:
 - ✓ Gained experience with complex state management
 
 ### 7.3 Code Metrics
-- **Lines of Code**: ~3000+ (excluding whitespace and comments)
+- **Lines of Code**: ~3000+ 
 - **Classes**: 15+ well-structured classes
 - **Methods**: 80+ focused, single-purpose methods
 - **Cyclomatic Complexity**: Average 3-4 (low complexity)
@@ -365,9 +365,9 @@ The project provides a solid foundation for future enhancements and serves as a 
 ---
 
 **Project Completed**: June 2026  
-**Total Development Time**: [Semester Duration]  
-**Team**: [Project Contributors]  
-**Supervisor**: [Course Instructor]
+**Total Development Time**: 3 weeks 
+**Team**: Muhammed Ergül Akgül, Zehra Nur Erciyaz, Saadet Çiçek
+**Supervisor**: Ahmet Nusret Toprak
 
 ---
 
